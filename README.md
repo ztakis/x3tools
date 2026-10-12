@@ -19,7 +19,7 @@ Guides and source: [ztakis/x3utils](https://github.com/ztakis/x3utils)
 
 A ride dashboard for Android, over Bluetooth.
 
-No release yet.
+- **[v1.1.11 BETA](https://github.com/ztakis/x3tools/releases/tag/x3dash-v1.1.11-BETA)** — Android APK, plus an unsigned iPhone IPA for sideloading.
 
 ## Licenses
 
