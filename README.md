@@ -1,8 +1,8 @@
 # x3tools
 
-Downloads for tools made for 3rd-generation Segway-Ninebot scooters (ZT3 Pro, Max G3, F3, GT3).
+Downloads for tools made for 3rd-generation scooters.
 
-Not affiliated with Segway or Ninebot. Use at your own risk.
+This is an independent project, not affiliated with the scooter manufacturer.
 
 ## x3utils
 
