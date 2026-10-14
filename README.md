@@ -9,8 +9,7 @@ This is an independent project, not affiliated with the scooter manufacturer.
 Back up and flash the scooter controller over ST-LINK.
 
 - **[CLI v1.8.3](https://github.com/ztakis/x3tools/releases/tag/x3utils-cli-v1.8.3)** — terminal scripts for Windows, Linux and macOS.
-- **[GUI v2.1.7 BETA](https://github.com/ztakis/x3utils/releases/tag/gui-v2.1.7-beta)** — latest test build for Windows, Linux, macOS and Android.
-- **[GUI v2.1.0](https://github.com/ztakis/x3utils/releases/tag/gui-v2.1.0)** — desktop app for Windows, Linux and macOS, plus an Android APK.
+- **[GUI v2.1.9](https://github.com/ztakis/x3utils/releases/tag/gui-v2.1.9)** — desktop app for Windows, Linux and macOS, plus an Android APK.
 - **[Web app](https://x3utils-web.pages.dev/)** — Chrome and Edge, no install.
 
 Guides and source: [ztakis/x3utils](https://github.com/ztakis/x3utils)
