@@ -2,8 +2,6 @@
 
 Downloads for tools made for 3rd-generation scooters.
 
-This is an independent project, not affiliated with the scooter manufacturer.
-
 ## x3utils
 
 Back up and flash the scooter controller over ST-LINK.
