@@ -18,6 +18,7 @@ A ride dashboard over Bluetooth.
 <table><tr>
 
 <td><img width="370" height="800" alt="x3dash android" src="https://github.com/user-attachments/assets/004744d3-94c1-4c6b-b83b-a6d85fab2557" /></td>
+<td><img width="370" height="800" alt="x3dash android" src="https://github.com/user-attachments/assets/0af4438c-b080-47fd-935d-d2a07bb73f59" /></td>
 
 </tr></table>
 
