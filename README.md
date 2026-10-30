@@ -22,7 +22,7 @@ A ride dashboard over Bluetooth.
 
 </tr></table>
 
-- **[v1.2.2 BETA](https://github.com/ztakis/x3tools/releases/tag/x3dash_v1.2.2-BETA)** — Android APK, plus an unsigned iPhone IPA for sideloading.
+- **[v1.2.3 BETA](https://github.com/ztakis/x3tools/releases/tag/x3dash_v1.2.3-BETA)** — Android APK, plus an unsigned iPhone IPA for sideloading.
 
 ## Licenses
 
