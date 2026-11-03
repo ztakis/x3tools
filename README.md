@@ -15,6 +15,12 @@ A dashboard app over BLE for x3 scooter geeks.
 
 - **[v1.2.6 BETA](https://github.com/ztakis/x3tools/releases/tag/x3dash_v1.2.6-BETA)** — Android APK, plus an unsigned iPhone IPA for sideloading.
 
+## x3 Ride Viewer
+
+Charts for a ride recorded with x3dash REC or SHU: speed, power, temperatures and more, with a second ride to compare. Runs in your browser, and your files stay on your device.
+
+- **[Open the viewer](https://ztakis.github.io/x3tools/ride-viewer/)**
+
 ## x3utils
 
 Back up and flash the scooter controller over ST-LINK.

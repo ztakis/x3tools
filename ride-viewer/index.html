@@ -1,0 +1,1333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>x3 Ride Viewer</title>
+<style>
+  /* one dark look on purpose: a chart wall read beside a ride video, on a desktop */
+  :root{
+    color-scheme: dark;
+    --bg: #0a0d13;
+    --panel: #151b26;
+    --panel-border: #3c434f;
+    --panel-border-hover: #4e5766;
+    --text: #e8edf4;
+    --text-dim: #9ba3af;
+    --accent: #4e85bc;
+    --accent-dim: #3a6389;
+    --amber: #e4b463;
+    --red: #d9705e;
+    --ride-b: rgba(232,237,244,0.72);
+    --grid: #202630;
+    --mono: "SF Mono", "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+    --sans: -apple-system, "Segoe UI", Inter, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  /* hidden wins over every display below, opened from disk as in the artifact */
+  [hidden]{display:none !important;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--sans);}
+  body{padding:20px 16px 40px;}
+  .wrap{max-width:1520px;margin:0 auto;}
+
+  .head{
+    display:flex; justify-content:space-between; align-items:flex-end;
+    border-bottom:1px solid var(--panel-border); padding-bottom:14px; margin-bottom:16px;
+    flex-wrap:wrap; gap:10px;
+  }
+  .head h1{
+    font-family:var(--mono); font-size:19px; font-weight:600; margin:0;
+    color:var(--text); letter-spacing:0.2px;
+  }
+  .head .sub{font-family:var(--mono); font-size:12px; color:var(--text-dim); margin-top:4px;}
+  .head .badge{
+    font-family:var(--mono); font-size:11px; color:var(--accent);
+    border:1px solid var(--accent-dim); border-radius:3px; padding:4px 8px;
+    background:rgba(78,133,188,0.10);
+  }
+
+  input[type=file]{display:none;}
+  #dzError{color:var(--red); font-family:var(--mono); font-size:12px; margin:-4px 0 14px; display:none;}
+
+  /* ---- the two ride slots, A and B: where a ride is dropped ---- */
+  .slot:hover, .slot.dragover{
+    border-color: var(--accent-dim);
+    background: rgba(78,133,188,0.08);
+    color: var(--text);
+  }
+  .slots{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;}
+  .slot{
+    display:flex; align-items:center; gap:10px; min-width:0;
+    border:1.5px dashed var(--panel-border); border-radius:6px; padding:9px 12px;
+    cursor:pointer; font-family:var(--mono); font-size:12px; color:var(--text-dim);
+    transition: border-color .15s, background .15s;
+  }
+  .slot.filled{border-style:solid; background:var(--panel);}
+  .slot:focus-visible{outline:1px solid var(--accent-dim); outline-offset:2px;}
+  .slot .key{
+    flex:none; width:20px; height:20px; border-radius:3px; display:grid; place-items:center;
+    font-weight:700; color:var(--bg); background:var(--text-dim);
+  }
+  .slot.filled[data-slot="0"] .key{background:var(--accent);}
+  .slot.filled[data-slot="1"] .key{background:var(--text);}
+  .slot .sample{flex:none; width:22px; height:2px; border-radius:1px;}
+  .slot[data-slot="0"] .sample{background:var(--accent);}
+  .slot[data-slot="1"] .sample{background:var(--ride-b);}
+  body:not(.overlay) .slot .sample, .slot:not(.filled) .sample{visibility:hidden;}
+  .slot .fname{color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;}
+  .slot .hint{margin-left:auto; white-space:nowrap; font-size:11px;}
+  .slot .remove{
+    flex:none; font:inherit; font-size:11px; color:var(--text-dim); background:none;
+    border:1px solid var(--panel-border); border-radius:3px; padding:2px 8px; cursor:pointer;
+  }
+  .slot .remove:hover, .slot .remove:focus-visible{color:var(--text); border-color:var(--panel-border-hover);}
+
+  /* ---- view controls ---- */
+  .controls{
+    display:flex; flex-wrap:wrap; gap:10px 22px; align-items:center; margin-bottom:18px;
+    font-family:var(--mono); font-size:12px; color:var(--text-dim);
+  }
+  .seg{display:flex; align-items:center; gap:8px;}
+  .seg-label{font-size:11px;}
+  .seg .opts{display:flex; border:1px solid var(--panel-border); border-radius:4px; overflow:hidden;}
+  .seg button, .nudge button{
+    font:inherit; color:var(--text-dim); background:none; border:0; padding:5px 11px; cursor:pointer;
+  }
+  .seg button + button{border-left:1px solid var(--panel-border);}
+  .seg button[aria-pressed="true"]{color:var(--bg); background:var(--accent);}
+  .seg button:hover:not([aria-pressed="true"]), .nudge button:hover{color:var(--text);}
+  .seg button:focus-visible, .nudge button:focus-visible, .nudge input:focus-visible{outline:1px solid var(--accent); outline-offset:-1px;}
+  .nudge{display:flex; align-items:center; gap:6px;}
+  .nudge .step{border:1px solid var(--panel-border); border-radius:4px; padding:4px 9px;}
+  .nudge input[type=range]{width:260px; accent-color:var(--accent);}
+  .nudge .nval{min-width:78px; text-align:right; color:var(--text); font-variant-numeric:tabular-nums;}
+  .nudge .reset{border:1px solid var(--panel-border); border-radius:4px; padding:4px 9px;}
+  .zoom{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+  .zoom .zval{color:var(--text); font-variant-numeric:tabular-nums;}
+  .zoom .reset{
+    font:inherit; color:var(--text-dim); background:none; cursor:pointer;
+    border:1px solid var(--panel-border); border-radius:4px; padding:4px 9px;
+  }
+  .zoom .reset:hover{color:var(--text);}
+  .zoom .reset:focus-visible{outline:1px solid var(--accent); outline-offset:-1px;}
+  .zoom .zhint{font-size:10.5px;}
+  /* the hint stays readable while there is nothing to reset */
+  .controls .zoom.off{opacity:1;}
+  .controls .zoom.off .reset{opacity:0.4;}
+  /* View and Nudge B wait for a second ride: shown, greyed, inert */
+  .controls .off{opacity:0.4;}
+  .controls .off button, .controls .off input{cursor:default; pointer-events:none;}
+
+  /* ---- chips ---- */
+  .stats{
+    display:grid; grid-template-columns:repeat(auto-fit, minmax(120px,1fr));
+    gap:10px; margin-bottom:22px;
+  }
+  /* every chip in one row where they fit; a hidden chip leaves no hole */
+  @media (min-width: 1180px){
+    .stats{grid-template-columns:none; grid-auto-flow:column; grid-auto-columns:minmax(0,1fr);}
+  }
+  .stat{
+    background:var(--panel); border:1px solid var(--panel-border); border-radius:6px;
+    padding:12px 14px; min-width:0;
+  }
+  .stat .label{font-size:11px; color:var(--text-dim); margin-bottom:6px;}
+  .stat .val{font-family:var(--mono); font-size:22px; color:var(--text); line-height:1; font-variant-numeric:tabular-nums; white-space:nowrap;}
+  .stat .val span.unit{font-size:12px; color:var(--text-dim); margin-left:3px;}
+  .stat .vs{font-family:var(--mono); font-size:11.5px; color:var(--text-dim); margin-top:7px; font-variant-numeric:tabular-nums; white-space:nowrap;}
+  .stat .vs b{color:var(--text); font-weight:600;}
+  .stat.accent .val{color:var(--accent);}
+  .stat.warn .val{color:var(--amber);}
+
+  /* ---- readout (live hover values): a fixed column left of the charts,
+     one value a line, so nothing moves while the pointer does ---- */
+  .board{display:grid; grid-template-columns:290px minmax(0,1fr); gap:16px; align-items:start;}
+  #readout{
+    background:var(--panel); border:1px solid var(--panel-border-hover); border-radius:6px;
+    padding:10px 12px;
+    font-family:var(--mono); font-size:14px; font-variant-numeric:tabular-nums;
+    display:none; flex-direction:column; gap:4px;
+    position:sticky; top:calc(env(safe-area-inset-top, 0px) + 8px); z-index:2;
+    max-height:calc(100vh - 16px); overflow-y:auto;
+  }
+  #readout.show{display:flex;}
+  #readout .ro-time{
+    display:flex; flex-direction:column; gap:2px; color:var(--text); font-weight:600; font-size:17px;
+    padding-bottom:6px; margin-bottom:3px; border-bottom:1px solid var(--panel-border);
+  }
+  #readout .ro-clock{color:var(--text-dim); font-weight:400; font-size:13.5px; min-height:1.2em;}
+  #readout .ro-item{display:flex; align-items:center; color:var(--text-dim); white-space:nowrap; gap:5px;}
+  #readout .ro-item[hidden]{display:none;}
+  #readout .ro-item b{margin-left:auto; color:var(--text); font-weight:600; text-align:right;}
+  #readout .dot{flex:none; display:inline-block; width:8px; height:8px; border-radius:50%;}
+  /* a narrow window has no room for a column: the readout goes back on top */
+  @media (max-width: 760px){
+    .board{grid-template-columns:minmax(0,1fr);}
+    #readout{flex-direction:row; flex-wrap:wrap; gap:6px 18px; max-height:none; top:env(safe-area-inset-top, 0px);}
+    #readout .ro-time{flex-direction:row; gap:8px; border:0; padding:0; margin:0; width:100%;}
+    #readout .ro-item b{margin-left:4px;}
+  }
+
+  #charts{display:none;}
+
+  .panel{
+    background:var(--panel); border:1px solid var(--panel-border); border-radius:6px;
+    padding:16px 14px 10px; margin-bottom:16px;
+  }
+  .panel-title{
+    display:flex; justify-content:space-between; align-items:baseline; margin-bottom:2px;
+    width:100%; padding:0; border:0; background:none; color:inherit; font:inherit;
+    text-align:left; cursor:pointer; user-select:none; gap:10px; flex-wrap:wrap;
+  }
+  .panel-title .name{color:var(--text); font-weight:600; font-family:var(--sans); font-size:13px;}
+  .panel-title .name::before{
+    content:'\25BE'; display:inline-block; width:14px; color:var(--text-dim);
+    transition:transform .15s;
+  }
+  .panel-title .swatch{display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; vertical-align:middle;}
+  .panel-title:hover .name::before, .panel-title:focus-visible .name::before{color:var(--accent);}
+  .panel-title:focus-visible{outline:1px solid var(--accent-dim); outline-offset:4px; border-radius:2px;}
+  .panel-title .peak{font-family:var(--mono); font-size:11px; color:var(--text-dim); font-variant-numeric:tabular-nums;}
+  .panel-title .peak b{color:var(--text); font-weight:600;}
+  .panel.collapsed{padding:12px 14px;}
+  .panel.collapsed .panel-title{margin-bottom:0;}
+  .panel.collapsed .panel-title .name::before{transform:rotate(-90deg);}
+  .panel.collapsed .panel-note,
+  .panel.collapsed .chart-row{display:none;}
+  .panel-note{font-family:var(--mono); font-size:10.5px; color:var(--text-dim); margin-bottom:8px;}
+
+  .chart-row{display:flex; gap:14px;}
+  .chart-stack{position:relative; flex:1 1 0; min-width:0; height:150px; cursor:crosshair;}
+  .chart-stack canvas{position:absolute; left:0; top:0; width:100%; height:100%;}
+  .chart-stack canvas.overlay{pointer-events:none;}
+  .chart-stack .tag{
+    position:absolute; top:0; right:8px; font-family:var(--mono); font-size:10px; font-weight:700;
+    color:var(--text-dim); pointer-events:none;
+  }
+
+  .foot{
+    text-align:center; font-family:var(--mono); font-size:11px; color:var(--text-dim);
+    margin-top:20px; padding-top:14px; border-top:1px solid var(--panel-border);
+  }
+  @media (prefers-reduced-motion: reduce){
+    .slot, .panel-title .name::before{transition:none;}
+  }
+</style>
+</head>
+<body class="overlay">
+<div class="wrap">
+
+  <div class="head">
+    <div>
+      <h1>x3 Ride Viewer</h1>
+      <div class="sub" id="dateLabel">Drop a ride CSV to begin</div>
+    </div>
+    <div class="badge" id="durBadge" hidden>— min</div>
+  </div>
+
+  <input type="file" id="fileA" accept=".csv,text/csv" multiple>
+  <input type="file" id="fileB" accept=".csv,text/csv">
+
+  <div id="slots" class="slots">
+    <div class="slot" data-slot="0" tabindex="0" role="button" aria-label="Ride A: drop or click a ride">
+      <span class="key">A</span><span class="sample"></span><span class="fname"></span>
+      <span class="hint">drop or click a ride · SHU or x3dash REC .csv</span>
+    </div>
+    <div class="slot" data-slot="1" tabindex="0" role="button" aria-label="Ride B: drop or click to compare">
+      <span class="key">B</span><span class="sample"></span><span class="fname"></span>
+      <span class="hint">drop or click a second ride to compare</span>
+      <button type="button" class="remove" hidden>Remove</button>
+    </div>
+  </div>
+  <div id="dzError"></div>
+
+  <div id="controls" class="controls">
+    <div class="seg">
+      <span class="seg-label">Axis</span>
+      <div class="opts" id="axisOpts">
+        <button type="button" data-axis="time" aria-pressed="true">Time</button>
+        <button type="button" data-axis="dist" aria-pressed="false">Distance</button>
+      </div>
+    </div>
+    <div class="seg off" id="viewSeg">
+      <span class="seg-label">View</span>
+      <div class="opts" id="viewOpts">
+        <button type="button" data-mode="overlay" aria-pressed="true">Overlay</button>
+        <button type="button" data-mode="side" aria-pressed="false">Side by side</button>
+      </div>
+    </div>
+    <div class="nudge off" id="nudge">
+      <span class="seg-label">Nudge B</span>
+      <button type="button" class="step" id="nudgeMinus" title="Shift-click for ten steps">−</button>
+      <input type="range" id="nudgeRange" aria-label="Nudge ride B along the axis">
+      <button type="button" class="step" id="nudgePlus" title="Shift-click for ten steps">+</button>
+      <span class="nval" id="nudgeVal">0 s</span>
+      <button type="button" class="reset" id="nudgeReset">Reset</button>
+    </div>
+    <div class="zoom off" id="zoomSeg">
+      <span class="seg-label">Zoom</span>
+      <span class="zval" id="zoomVal">whole ride</span>
+      <button type="button" class="reset" id="zoomReset">Whole ride</button>
+      <span class="zhint">drag a chart to zoom · Ctrl+wheel or pinch zooms · Shift+wheel pans · double-click for the whole ride</span>
+    </div>
+  </div>
+
+  <div id="stats" class="stats" hidden></div>
+
+  <div class="board">
+    <div id="readout">
+      <span class="ro-time"><span id="roTime">—</span><span class="ro-clock" id="roClock"></span></span>
+    </div>
+
+    <div id="charts">
+      <div class="foot" id="footNote"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const rides = [null, null]; // ride A and ride B
+let chartRegistry = [];     // per-chart layout/mapping info, rebuilt on each render
+
+// a break of more than 3 s between rows is drawn as a gap: the dash was
+// closed, or the app was away, and nothing was read in between
+const GAP_MIN = 3 / 60;
+
+// what the page shows, remembered in this browser; the nudge belongs to the
+// pair of rides, so it starts at zero with every new file
+// its own keys, so this page and the ride viewer never fold each other's charts
+const VIEW_KEY = 'shfwViewer.view';
+const view = Object.assign({ axis: 'time', mode: 'overlay' }, (() => {
+  try { return JSON.parse(localStorage.getItem(VIEW_KEY)) || {}; } catch (e) { return {}; }
+})());
+const nudge = { time: 0, dist: 0 }; // seconds, metres
+function saveView() {
+  try { localStorage.setItem(VIEW_KEY, JSON.stringify({ axis: view.axis, mode: view.mode })); } catch (e) {}
+}
+
+// ============================================================
+// Number helpers: an empty cell parses as NaN and is skipped
+// ============================================================
+function highest(arr) { let m = -Infinity; for (const v of arr) if (v > m) m = v; return m === -Infinity ? NaN : m; }
+function lowest(arr) { let m = Infinity; for (const v of arr) if (v < m) m = v; return m === Infinity ? NaN : m; }
+function firstFinite(arr) { const v = arr.find(Number.isFinite); return v === undefined ? NaN : v; }
+function lastFinite(arr) { for (let i = arr.length - 1; i >= 0; i--) if (Number.isFinite(arr[i])) return arr[i]; return NaN; }
+function hasData(arr) { return arr.some(Number.isFinite); }
+function fix(v, places) { return Number.isFinite(v) ? v.toFixed(places) : '—'; }
+function shown(v, places, unit) { return Number.isFinite(v) ? v.toFixed(places) + unit : '—'; }
+function hms(sec) {
+  if (!Number.isFinite(sec)) return '—';
+  const s = Math.round(sec), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, ss = String(s % 60).padStart(2, '0');
+  return h ? h + ':' + String(m).padStart(2, '0') + ':' + ss : m + ':' + ss;
+}
+// minutes on the axis as m:ss.s, for a window read in seconds
+function clockText(min) {
+  const s = Math.max(0, min * 60), m = Math.floor(s / 60);
+  return m + ':' + (s - m * 60).toFixed(1).padStart(4, '0');
+}
+function signed(text, v) { return (v > 0 ? '+' : v < 0 ? '−' : '±') + text; }
+
+// the distance or the time ridden in this file: every rise of the trip
+// counter, added up, so a new trip (the counter back to 0) adds to the total
+// and never resets it
+function tripDistance(counter) {
+  let sum = 0, last = NaN;
+  for (const v of counter) {
+    if (!Number.isFinite(v)) continue;
+    if (Number.isFinite(last) && v > last) sum += v - last;
+    last = v;
+  }
+  return sum;
+}
+
+// The distance ridden at every row, in km, for the distance axis. The trip
+// counter steps in 0.1 km, too coarse to line two climbs up, so the speed
+// fills in between its steps: each step is the place the counter says, and
+// the rows between are spread by the distance the speed covered. Before the
+// first step and after the last, the speed alone. Nothing is added across a
+// gap. A file with no trip counter takes the speed alone.
+function rideDistance(t, speed, mileage) {
+  const n = t.length;
+  const S = new Array(n);
+  S[0] = 0;
+  for (let i = 1; i < n; i++) {
+    const dt = t[i] - t[i - 1];
+    const v = Number.isFinite(speed[i]) ? speed[i] : 0;
+    S[i] = S[i - 1] + (dt > 0 && dt <= GAP_MIN ? v * dt / 60 : 0);
+  }
+  const steps = []; // [row, counter km since the file began]
+  let sum = 0, last = NaN;
+  for (let i = 0; i < n; i++) {
+    const v = mileage[i];
+    if (!Number.isFinite(v)) continue;
+    if (Number.isFinite(last) && v > last) { sum += v - last; steps.push([i, sum]); }
+    last = v;
+  }
+  if (!steps.length) return S;
+  // the first step lands where the speed says, and every later one that
+  // many counter km further on
+  const base = S[steps[0][0]] - steps[0][1];
+  const d = new Array(n);
+  for (let i = 0; i < steps[0][0]; i++) d[i] = S[i];
+  for (let k = 0; k < steps.length; k++) {
+    const [ia, ca] = steps[k];
+    const da = base + ca;
+    if (k + 1 < steps.length) {
+      const [ib, cb] = steps[k + 1];
+      const ds = S[ib] - S[ia];
+      for (let i = ia; i < ib; i++) d[i] = da + (ds > 0 ? (cb - ca) * (S[i] - S[ia]) / ds : 0);
+    } else {
+      // past the last step the counter has not reached the next 0.1 km
+      for (let i = ia; i < n; i++) d[i] = da + Math.min(S[i] - S[ia], 0.1);
+    }
+  }
+  return d;
+}
+
+// ============================================================
+// CSV parsing: every row is kept, nothing is sampled away
+// ============================================================
+function parseRideCSV(text) {
+  const lines = text.split(/\r\n|\n/).filter(l => l.length > 0);
+  if (lines.length < 2) throw new Error("File looks empty.");
+  const header = lines[0].split(",").map(h => h.trim());
+
+  function col(name) {
+    const idx = header.indexOf(name);
+    if (idx === -1) throw new Error("Missing expected column: " + name);
+    return idx;
+  }
+  // every other column is optional: a file without it hides that chart; the
+  // first name a file carries wins
+  const opt = (...names) => {
+    for (const name of names) { const i = header.indexOf(name); if (i !== -1) return i; }
+    return -1;
+  };
+
+  const iTime = col("time_ms");
+  const iIso = opt("time_iso");
+  // field: its column, under SHU SHFW's name first, then SHU v4's and x3dash REC's
+  const cols = {
+    speed: col("Speed (km/h)"),
+    battery: opt("Charge level (%)", "Battery (%)"),
+    current: opt("Current (A)"),
+    power: opt("Power (W)"),
+    voltage: opt("Voltage (V)"),
+    range: opt("Remaining mileage (km)"),
+    temp: opt("Temperature (°C)"),                         // SHU v4's vehicle temperature
+    motor: opt("Motor temp (°C)", "Motor temperature (°C)"), // REC's twelfth column
+    mileage: opt("Trip mileage (km)"),
+    tripSec: opt("Trip time"),
+    // SHFW's own
+    ctrl: opt("Controller temp (°C)"),
+    throttle: opt("Throttle (%)"),
+    brake: opt("Brake (%)"),
+    iq: opt("Iq (A)"),
+    iqOrder: opt("Iq order (A)"),
+    id: opt("Id (A)"),
+    vq: opt("Vq (%)"),
+    vd: opt("Vd (%)"),
+  };
+  // flip sign: + = drawn, - = regen, for the power and the current alike;
+  // SHFW's motor values keep the controller's own sign
+  const flipped = new Set(['power', 'current']);
+
+  const n = lines.length - 1;
+  const mk = () => new Array(n);
+  const tMs = mk(), iso = mk();
+  const out = {};
+  for (const f in cols) out[f] = mk();
+
+  for (let i = 1; i < lines.length; i++) {
+    const c = lines[i].split(",");
+    const r = i - 1;
+    tMs[r] = parseFloat(c[iTime]);
+    iso[r] = iIso === -1 ? '' : (c[iIso] || '');
+    for (const f in cols) {
+      const v = cols[f] === -1 ? NaN : parseFloat(c[cols[f]]);
+      out[f][r] = flipped.has(f) ? -v : v;
+    }
+  }
+  out.tripMin = out.tripSec.map(v => v / 60);
+
+  const t0 = tMs[0];
+  const t = tMs.map(v => (v - t0) / 60000);
+  return Object.assign(out, { t, iso, d: rideDistance(t, out.speed, out.mileage), rawCount: n });
+}
+
+// ============================================================
+// The fields: one chart each, every one collapsible
+// ============================================================
+const CHART_SPECS = [
+  { key: 'speed', field: 'speed', name: 'Speed', short: 'Speed', color: '#598cc0',
+    fill: 'rgba(89,140,192,0.14)', min: 0, places: 1, unit: ' km/h',
+    peak: d => 'peak ' + fix(highest(d.speed), 1) + ' km/h' },
+  // the rider's hands, on a fixed 0–100 so two rides read alike
+  { key: 'throttle', field: 'throttle', name: 'Throttle', short: 'Throttle', color: '#8fd3f0',
+    fill: 'rgba(143,211,240,0.10)', min: 0, max: 100, places: 0, unit: '%',
+    peak: d => 'peak ' + fix(highest(d.throttle), 0) + '%' },
+  { key: 'brake', field: 'brake', name: 'Brake', short: 'Brake', color: '#e0667a',
+    fill: 'rgba(224,102,122,0.10)', min: 0, max: 100, places: 0, unit: '%',
+    peak: d => 'peak ' + fix(highest(d.brake), 0) + '%' },
+  { key: 'power', field: 'power', name: 'Power', short: 'Power', color: '#e4b463', places: 0, unit: ' W',
+    note: 'positive = power drawn from battery · negative = regen braking',
+    peak: d => 'peak draw ' + fix(highest(d.power), 0) + ' W · regen ' + fix(lowest(d.power), 0) + ' W' },
+  { key: 'current', field: 'current', name: 'Current', short: 'Current', color: '#e08752', places: 1, unit: ' A',
+    note: 'positive = current drawn from battery · negative = regen braking',
+    peak: d => 'peak ' + fix(highest(d.current), 1) + ' A · regen ' + fix(lowest(d.current), 1) + ' A' },
+  // SHFW's motor control, in the controller's own sign
+  { key: 'iqOrder', field: 'iqOrder', name: 'Iq order', short: 'Iq order', color: '#9aa6ff', places: 2, unit: ' A',
+    note: 'the torque current the controller asks for',
+    peak: d => fix(lowest(d.iqOrder), 1) + ' – ' + fix(highest(d.iqOrder), 1) + ' A' },
+  { key: 'iq', field: 'iq', name: 'Iq', short: 'Iq', color: '#e07ab8', places: 2, unit: ' A',
+    note: 'the torque current the motor carries',
+    peak: d => fix(lowest(d.iq), 1) + ' – ' + fix(highest(d.iq), 1) + ' A' },
+  { key: 'id', field: 'id', name: 'Id', short: 'Id', color: '#c9a063', places: 2, unit: ' A',
+    note: 'the flux current · below zero is field weakening',
+    peak: d => fix(lowest(d.id), 1) + ' – ' + fix(highest(d.id), 1) + ' A' },
+  { key: 'vq', field: 'vq', name: 'Vq', short: 'Vq', color: '#68d4b0', places: 1, unit: '%',
+    peak: d => fix(lowest(d.vq), 1) + ' – ' + fix(highest(d.vq), 1) + '%' },
+  { key: 'vd', field: 'vd', name: 'Vd', short: 'Vd', color: '#93b07a', places: 1, unit: '%',
+    peak: d => fix(lowest(d.vd), 1) + ' – ' + fix(highest(d.vd), 1) + '%' },
+  { key: 'motor', field: 'motor', name: 'Motor temperature', short: 'Motor', color: '#c08be0', places: 0, unit: ' °C',
+    note: 'a patched VCU · a gap is a row with no reading',
+    peak: d => 'peak ' + fix(highest(d.motor), 0) + ' °C' },
+  { key: 'ctrl', field: 'ctrl', name: 'Controller temperature', short: 'Controller', color: '#e09a5e', places: 1, unit: ' °C',
+    peak: d => 'peak ' + fix(highest(d.ctrl), 1) + ' °C' },
+  { key: 'battery', field: 'battery', name: 'Battery', short: 'Battery', color: '#a9d46a', places: 0, unit: '%',
+    peak: d => fix(firstFinite(d.battery), 0) + '% → ' + fix(lastFinite(d.battery), 0) + '%' },
+  { key: 'voltage', field: 'voltage', name: 'Voltage', short: 'Voltage', color: '#6fa3e0', places: 2, unit: ' V',
+    peak: d => fix(lowest(d.voltage), 2) + ' – ' + fix(highest(d.voltage), 2) + ' V' },
+  { key: 'range', field: 'range', name: 'Remaining mileage', short: 'Range', color: '#5cc3cc', places: 1, unit: ' km',
+    peak: d => fix(firstFinite(d.range), 1) + ' → ' + fix(lastFinite(d.range), 1) + ' km' },
+  { key: 'temp', field: 'temp', name: 'Vehicle temperature', short: 'Vehicle', color: '#d9705e',
+    fill: 'rgba(217,112,94,0.12)', places: 0, unit: ' °C',
+    peak: d => 'peak ' + fix(highest(d.temp), 0) + ' °C' },
+  // the trip counters only climb, so they show in the readout and draw no chart
+  { key: 'mileage', field: 'mileage', short: 'Trip', color: '#d4c36a', places: 1, unit: ' km', chart: false },
+  { key: 'triptime', field: 'tripMin', short: 'Trip time', color: '#9ba3af', places: 1, unit: ' min', chart: false,
+    readout: (d, i) => hms(d.tripSec[i]) },
+];
+
+const CHIPS = [
+  { label: 'Distance', cls: 'accent', get: s => s.dist, places: 2, unit: 'km' },
+  { label: 'Trip time', get: s => s.tripSec, time: true },
+  { label: 'Top speed', get: s => s.topSpeed, places: 1, unit: 'km/h' },
+  // the deepest field weakening: Id's lowest reading, as a size
+  { label: 'Max FW Id', cls: 'warn', get: s => s.fwId, places: 1, unit: 'A', needs: 'id' },
+  { label: 'Peak draw', cls: 'warn', get: s => s.peakDraw, places: 0, unit: 'W' },
+  { label: 'Peak current', cls: 'warn', get: s => s.peakAmps, places: 1, unit: 'A' },
+  { label: 'Peak Iq', cls: 'warn', get: s => s.peakIq, places: 1, unit: 'A', needs: 'iq' },
+  { label: 'Battery used', get: s => s.battStart - s.battEnd, places: 0, unit: '%' },
+  { label: 'Max vehicle temp', get: s => s.maxTemp, places: 0, unit: '°C', needs: 'temp' },
+  { label: 'Max controller temp', get: s => s.maxCtrl, places: 1, unit: '°C', needs: 'ctrl' },
+  { label: 'Max motor temp', get: s => s.maxMotor, places: 0, unit: '°C', needs: 'motor' },
+];
+
+function loaded() { return rides.filter(Boolean); }
+function comparing() { return !!(rides[0] && rides[1]); }
+function anyHas(key) { return loaded().some(r => r.has[key]); }
+
+// the fields these rides carry: a field with no reading in any file shows none
+function activeSpecs() { return CHART_SPECS.filter(spec => anyHas(spec.key)); }
+// the charts they draw
+function chartSpecs() { return activeSpecs().filter(spec => spec.chart !== false); }
+
+// ============================================================
+// The axis: time in minutes or distance in km, with B nudged along it
+// ============================================================
+function xArr(ride) { return view.axis === 'dist' ? ride.d : ride.t; }
+function offsetOf(k) {
+  if (k !== 1) return 0;
+  return view.axis === 'dist' ? nudge.dist / 1000 : nudge.time / 60;
+}
+// a stand test of half a minute reads in seconds, a ride in minutes
+function inSeconds(dom) { return view.axis === 'time' && dom.span < 2; }
+function domain() {
+  let lo = Infinity, hi = -Infinity;
+  rides.forEach((r, k) => {
+    if (!r) return;
+    const x = xArr(r), off = offsetOf(k);
+    lo = Math.min(lo, x[0] + off);
+    hi = Math.max(hi, x[x.length - 1] + off);
+  });
+  return { lo, hi, span: (hi - lo) || 1 };
+}
+
+// The zoom: a window on the axis, null for the whole ride. It is held in axis
+// units and clamped to the rides each time, so a nudge never pushes it past an
+// end; a new file or a new axis shows the whole ride again.
+let zoom = null;
+function minSpan() { return view.axis === 'dist' ? 0.02 : 5 / 60; } // 20 m, 5 s
+function viewDom() {
+  const full = domain();
+  if (!zoom) return full;
+  const span = Math.min(zoom.hi - zoom.lo, full.span);
+  const lo = Math.max(full.lo, Math.min(zoom.lo, full.hi - span));
+  return { lo, hi: lo + span, span };
+}
+function setZoom(lo, hi) {
+  const full = domain();
+  let span = Math.max(hi - lo, minSpan());
+  if (span >= full.span) zoom = null;
+  else {
+    lo = Math.max(full.lo, Math.min(lo, full.hi - span));
+    zoom = { lo, hi: lo + span };
+  }
+  syncZoom();
+  clearCrosshair();
+  renderAll();
+}
+function resetZoom() { zoom = null; syncZoom(); }
+function axisText(v) {
+  if (view.axis === 'dist') return v.toFixed(viewDom().span < 0.5 ? 3 : 2) + ' km';
+  return hms(v * 60);
+}
+function syncZoom() {
+  const d = viewDom();
+  document.getElementById('zoomSeg').classList.toggle('off', !zoom);
+  document.getElementById('zoomReset').disabled = !zoom;
+  document.getElementById('zoomVal').textContent = zoom ? axisText(d.lo) + ' – ' + axisText(d.hi) : 'whole ride';
+}
+
+// one y scale for both rides, so the same height is the same reading
+function axisFor(spec) {
+  const rs = loaded().filter(r => r.has[spec.key]);
+  const lo = spec.min !== undefined ? spec.min : Math.min(...rs.map(r => r.lo[spec.key]));
+  const hi = spec.max !== undefined ? spec.max : Math.max(...rs.map(r => r.hi[spec.key]));
+  return { min: lo, max: hi, range: (hi - lo) || 1 };
+}
+// the row of a ride nearest to u on the axis, or -1 when that ride has no row
+// near it (outside the ride, or in a gap)
+function nearestRow(ride, u) {
+  const x = xArr(ride);
+  let lo = 0, hi = x.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (x[mid] < u) lo = mid + 1; else hi = mid;
+  }
+  if (lo > 0 && Math.abs(x[lo - 1] - u) < Math.abs(x[lo] - u)) lo--;
+  const tol = view.axis === 'dist' ? 0.03 : GAP_MIN;
+  return Math.abs(x[lo] - u) <= tol ? lo : -1;
+}
+
+// ============================================================
+// Collapsible panels: a tap on a title folds its chart away,
+// remembered in this browser across loads
+// ============================================================
+const COLLAPSED_KEY = 'shfwViewer.collapsed';
+const collapsed = new Set((() => {
+  try { return JSON.parse(localStorage.getItem(COLLAPSED_KEY)) || []; } catch (e) { return []; }
+})());
+
+function saveCollapsed() {
+  try { localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...collapsed])); } catch (e) {}
+}
+
+function applyCollapsed(spec) {
+  const shut = collapsed.has(spec.key);
+  spec.panel.classList.toggle('collapsed', shut);
+  spec.panel.querySelector('.panel-title').setAttribute('aria-expanded', String(!shut));
+}
+
+function buildPanels() {
+  const charts = document.getElementById('charts');
+  const foot = document.getElementById('footNote');
+  const readout = document.getElementById('readout');
+  CHART_SPECS.forEach(spec => {
+    addReadoutItem(readout, spec);
+    if (spec.chart === false) return;
+    const panel = document.createElement('div');
+    panel.className = 'panel';
+    panel.dataset.chart = spec.key;
+    panel.hidden = true;
+    panel.innerHTML =
+      '<button type="button" class="panel-title" aria-expanded="true">' +
+        '<span class="name"><span class="swatch"></span></span><span class="peak"></span></button>' +
+      (spec.note ? '<div class="panel-note"></div>' : '') +
+      '<div class="chart-row"></div>';
+    panel.querySelector('.swatch').style.background = spec.color;
+    panel.querySelector('.name').append(spec.name);
+    if (spec.note) panel.querySelector('.panel-note').textContent = spec.note;
+    charts.insertBefore(panel, foot);
+    spec.panel = panel;
+    applyCollapsed(spec);
+    panel.querySelector('.panel-title').addEventListener('click', () => {
+      if (collapsed.has(spec.key)) collapsed.delete(spec.key); else collapsed.add(spec.key);
+      saveCollapsed();
+      applyCollapsed(spec);
+      clearCrosshair();
+      if (rides[0]) renderAll();
+    });
+  });
+}
+
+function addReadoutItem(readout, spec) {
+  const item = document.createElement('span');
+  item.className = 'ro-item';
+  item.hidden = true;
+  item.innerHTML = '<span class="dot"></span><b></b>';
+  item.querySelector('.dot').style.background = spec.color;
+  item.insertBefore(document.createTextNode(spec.short + ' '), item.querySelector('b'));
+  readout.append(item);
+  spec.roItem = item;
+  spec.roValue = item.querySelector('b');
+}
+buildPanels();
+
+// ============================================================
+// Stats: every row counts
+// ============================================================
+function computeStats(data) {
+  const dist = tripDistance(data.mileage);
+  const tripSec = hasData(data.tripSec) ? tripDistance(data.tripSec) : NaN;
+  const topSpeed = highest(data.speed);
+  const fwId = hasData(data.id) ? Math.max(0, -lowest(data.id)) : NaN;
+  const peakDraw = highest(data.power);
+  const peakAmps = highest(data.current);
+  const battStart = firstFinite(data.battery);
+  const battEnd = lastFinite(data.battery);
+  const maxTemp = highest(data.temp);
+  const maxMotor = highest(data.motor);
+  const maxCtrl = highest(data.ctrl);
+  const peakIq = highest(data.iq);
+  const durMin = data.t[data.t.length - 1];
+  return { dist, tripSec, topSpeed, fwId, peakDraw, peakAmps, peakIq, battStart, battEnd, maxTemp,
+           maxCtrl, maxMotor, durMin };
+}
+
+function startLabel(iso) {
+  const d = new Date(iso);
+  if (!iso || isNaN(d)) return '';
+  return d.toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function prepareRide(data, name) {
+  data.name = name;
+  data.has = {}; data.lo = {}; data.hi = {};
+  CHART_SPECS.forEach(spec => {
+    const arr = data[spec.field];
+    data.has[spec.key] = hasData(arr);
+    data.lo[spec.key] = lowest(arr);
+    data.hi[spec.key] = highest(arr);
+  });
+  data.stats = computeStats(data);
+  return data;
+}
+
+function chipText(chip, v) {
+  return chip.time ? hms(v) : fix(v, chip.places);
+}
+
+function renderChips() {
+  const box = document.getElementById('stats');
+  box.replaceChildren();
+  const [A, B] = rides;
+  CHIPS.forEach(chip => {
+    if (chip.needs && !anyHas(chip.needs)) return;
+    const el = document.createElement('div');
+    el.className = 'stat' + (chip.cls ? ' ' + chip.cls : '');
+    const label = document.createElement('div');
+    label.className = 'label';
+    label.textContent = chip.label;
+    const val = document.createElement('div');
+    val.className = 'val';
+    const a = chip.get(A.stats);
+    val.textContent = chipText(chip, a);
+    if (chip.unit) {
+      const u = document.createElement('span');
+      u.className = 'unit';
+      u.textContent = chip.unit;
+      val.append(u);
+    }
+    el.append(label, val);
+    if (B) {
+      // B under A, with how far B is from A
+      const b = chip.get(B.stats);
+      const vs = document.createElement('div');
+      vs.className = 'vs';
+      vs.append('B ');
+      const bv = document.createElement('b');
+      bv.textContent = chipText(chip, b);
+      vs.append(bv);
+      if (Number.isFinite(a) && Number.isFinite(b)) {
+        const delta = b - a;
+        vs.append(' · ' + signed(chip.time ? hms(Math.abs(delta)) : Math.abs(delta).toFixed(chip.places), delta));
+      }
+      el.append(vs);
+    }
+    box.append(el);
+  });
+  box.hidden = false;
+}
+
+// ============================================================
+// Loading: the first file is A, a second one is B
+// ============================================================
+function refresh() {
+  const [A, B] = rides;
+  document.body.classList.toggle('overlay', !comparing() || view.mode === 'overlay');
+
+  const start = startLabel(A.iso[0]);
+  document.getElementById('dateLabel').textContent =
+    A.name + (start ? ' · ' + start : '') + (B ? '   vs   ' + B.name : '');
+  const badge = document.getElementById('durBadge');
+  badge.hidden = false;
+  badge.textContent = A.stats.durMin.toFixed(1) + (B ? ' / ' + B.stats.durMin.toFixed(1) : '') + ' min ride';
+
+  document.querySelectorAll('.slot').forEach(slot => {
+    const r = rides[+slot.dataset.slot];
+    slot.classList.toggle('filled', !!r);
+    slot.querySelector('.fname').textContent = r ? r.name : '';
+    slot.querySelector('.hint').textContent = r ? 'drop or click to replace'
+      : 'drop or click a second ride to compare';
+  });
+  document.querySelector('.slot[data-slot="1"] .remove').hidden = !B;
+
+  syncControls();
+
+  renderChips();
+
+  CHART_SPECS.forEach(spec => {
+    spec.roItem.hidden = !anyHas(spec.key);
+    if (!spec.panel) return;
+    spec.panel.hidden = !anyHas(spec.key);
+    const peak = spec.panel.querySelector('.peak');
+    peak.replaceChildren();
+    if (!anyHas(spec.key)) return;
+    if (!B) { peak.textContent = spec.peak(A); return; }
+    rides.forEach((r, k) => {
+      const key = document.createElement('b');
+      key.textContent = (k ? '   B ' : 'A ');
+      peak.append(key, r.has[spec.key] ? spec.peak(r) : 'no readings');
+    });
+  });
+
+  document.getElementById('footNote').textContent =
+    loaded().map(r => r.rawCount.toLocaleString()).join(' + ') + ' samples · each pixel column draws its ' +
+    'lowest and highest reading · a break of more than 3 s is a gap' +
+    (view.axis === 'dist' ? " · distance is the trip counter's, filled in between its 0.1 km steps by the speed" : '');
+
+  document.getElementById('charts').style.display = 'block';
+  document.getElementById('readout').classList.add('show');
+  renderAll();
+}
+
+function loadRide(data, name, slot) {
+  rides[slot] = prepareRide(data, name);
+  nudge.time = 0; nudge.dist = 0;
+  resetZoom();
+  clearCrosshair();
+  refresh();
+}
+
+function removeB() {
+  rides[1] = null;
+  nudge.time = 0; nudge.dist = 0;
+  resetZoom();
+  clearCrosshair();
+  refresh();
+}
+
+// ============================================================
+// Controls: the axis, the view and the nudge
+// ============================================================
+const nudgeRange = document.getElementById('nudgeRange');
+
+function nudgeStep() { return view.axis === 'dist' ? 10 : 1; }
+function nudgeLabel() {
+  const v = nudge[view.axis];
+  if (view.axis === 'dist') return signed(Math.abs(v) >= 1000 ? (Math.abs(v) / 1000).toFixed(2) + ' km' : Math.abs(v) + ' m', v);
+  return signed(Math.abs(v) >= 60 ? hms(Math.abs(v)) + ' min' : Math.abs(v) + ' s', v);
+}
+
+function syncControls() {
+  // View and Nudge B stay greyed until there is a B to place
+  const two = comparing();
+  ['viewSeg', 'nudge'].forEach(id => {
+    const el = document.getElementById(id);
+    el.classList.toggle('off', !two);
+    el.querySelectorAll('button, input').forEach(c => { c.disabled = !two; });
+  });
+  document.querySelectorAll('#axisOpts button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.axis === view.axis)));
+  document.querySelectorAll('#viewOpts button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === view.mode)));
+  // the slider reaches a whole ride either way
+  const spans = loaded().map(r => view.axis === 'dist' ? r.d[r.d.length - 1] * 1000 : r.t[r.t.length - 1] * 60);
+  const step = nudgeStep();
+  const reach = Math.max(step * 10, Math.ceil(Math.max(0, ...spans) / step) * step);
+  nudgeRange.min = -reach; nudgeRange.max = reach; nudgeRange.step = step;
+  nudgeRange.value = nudge[view.axis];
+  document.getElementById('nudgeVal').textContent = nudgeLabel();
+}
+
+function setNudge(v) {
+  const step = nudgeStep();
+  const reach = +nudgeRange.max;
+  nudge[view.axis] = Math.max(-reach, Math.min(reach, Math.round(v / step) * step));
+  nudgeRange.value = nudge[view.axis];
+  document.getElementById('nudgeVal').textContent = nudgeLabel();
+  scheduleRender();
+}
+
+document.getElementById('axisOpts').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b || b.dataset.axis === view.axis) return;
+  view.axis = b.dataset.axis;
+  saveView();
+  resetZoom();
+  clearCrosshair();
+  if (rides[0]) refresh(); else syncControls();
+});
+document.getElementById('viewOpts').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b || b.dataset.mode === view.mode) return;
+  view.mode = b.dataset.mode;
+  saveView();
+  clearCrosshair();
+  refresh();
+});
+nudgeRange.addEventListener('input', () => setNudge(+nudgeRange.value));
+document.getElementById('nudgeMinus').addEventListener('click', e => setNudge(nudge[view.axis] - nudgeStep() * (e.shiftKey ? 10 : 1)));
+document.getElementById('nudgePlus').addEventListener('click', e => setNudge(nudge[view.axis] + nudgeStep() * (e.shiftKey ? 10 : 1)));
+document.getElementById('nudgeReset').addEventListener('click', () => setNudge(0));
+document.getElementById('zoomReset').addEventListener('click', () => setZoom(-Infinity, Infinity));
+
+let renderQueued = false;
+function scheduleRender() {
+  if (renderQueued) return;
+  renderQueued = true;
+  requestAnimationFrame(() => { renderQueued = false; clearCrosshair(); syncZoom(); renderAll(); });
+}
+
+// ============================================================
+// Canvas chart rendering (base layer, drawn once per load/resize)
+// ============================================================
+function axisLabelWidth(ctx, ax) {
+  let maxW = 0;
+  for (let i = 0; i <= 4; i++) {
+    const lbl = String(Math.round((ax.min + ax.range * i / 4) * 10) / 10);
+    maxW = Math.max(maxW, ctx.measureText(lbl).width);
+  }
+  return maxW;
+}
+
+function ensureStacks(row, count) {
+  if (row.children.length === count) return [...row.children];
+  row.replaceChildren();
+  for (let i = 0; i < count; i++) {
+    const s = document.createElement('div');
+    s.className = 'chart-stack';
+    s.innerHTML = '<canvas class="base"></canvas><canvas class="overlay"></canvas><span class="tag"></span>';
+    row.append(s);
+  }
+  return [...row.children];
+}
+
+function renderAll() {
+  chartRegistry = [];
+  if (!rides[0]) return;
+  const scratch = document.createElement('canvas').getContext('2d');
+  scratch.font = '10px SF Mono, monospace';
+
+  // one left padding across all charts so a shared axis keeps the hover
+  // crosshair aligned between panels; folded charts count too, so opening one
+  // never shifts the others
+  let padL = 0;
+  chartSpecs().forEach(spec => { padL = Math.max(padL, axisLabelWidth(scratch, axisFor(spec)) + 14); });
+  const padR = 8;
+  const dom = viewDom();
+  const side = comparing() && view.mode === 'side';
+
+  chartSpecs().forEach(spec => {
+    if (collapsed.has(spec.key)) return;
+    const row = spec.panel.querySelector('.chart-row');
+    const stacks = ensureStacks(row, side ? 2 : 1);
+    // overlay: B first, in light ink, and A over it in the chart's colour;
+    // side by side: each ride in its own half, both in the chart's colour
+    const plans = side
+      ? [[{ k: 0, style: 'own' }], [{ k: 1, style: 'own' }]]
+      : [comparing() ? [{ k: 1, style: 'b' }, { k: 0, style: 'a' }] : [{ k: 0, style: 'own' }]];
+    stacks.forEach((stack, j) => {
+      stack.querySelector('.tag').textContent = side ? (j ? 'B' : 'A') : '';
+      const info = drawBaseChart(stack.querySelector('canvas.base'), spec, padL, padR, dom, plans[j]);
+      info.overlay = stack.querySelector('canvas.overlay');
+      info.stack = stack;
+      info.spec = spec;
+      chartRegistry.push(info);
+    });
+  });
+
+  setupInteraction();
+}
+
+// Every row, reduced to what a pixel column can show: its lowest and its
+// highest reading, in the order they came, so a spike between two pixels is
+// never lost. A missing reading or a break of more than GAP_MIN in time ends
+// a segment: a gap, never a zero and never a straight line across.
+function envelope(x, off, t, data, xPos) {
+  const segs = [];
+  let seg = null, bucket = null, lastT = NaN;
+  function flush() {
+    if (!bucket) return;
+    const a = bucket.minI <= bucket.maxI ? [bucket.minI, bucket.min, bucket.maxI, bucket.max]
+                                         : [bucket.maxI, bucket.max, bucket.minI, bucket.min];
+    seg.push([xPos(x[a[0]] + off), a[1]]);
+    if (a[0] !== a[2]) seg.push([xPos(x[a[2]] + off), a[3]]);
+    bucket = null;
+  }
+  for (let i = 0; i < data.length; i++) {
+    const v = data[i];
+    if (!Number.isFinite(v) || !Number.isFinite(t[i])) { flush(); seg = null; lastT = NaN; continue; }
+    if (t[i] - lastT > GAP_MIN) { flush(); seg = null; }
+    if (!seg) { seg = []; segs.push(seg); }
+    const col = Math.floor(xPos(x[i] + off));
+    if (bucket && bucket.col !== col) flush();
+    if (!bucket) bucket = { col, min: v, minI: i, max: v, maxI: i };
+    else {
+      if (v < bucket.min) { bucket.min = v; bucket.minI = i; }
+      if (v > bucket.max) { bucket.max = v; bucket.maxI = i; }
+    }
+    lastT = t[i];
+  }
+  flush();
+  return segs;
+}
+
+function strokeOf(spec, style) { return style === 'b' ? 'rgba(232,237,244,0.72)' : spec.color; }
+
+function drawBaseChart(canvas, spec, padL, padR, dom, series) {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const w = rect.width, h = rect.height;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+
+  const padT = 8, padB = 20;
+  const plotW = w - padL - padR;
+  const plotH = h - padT - padB;
+
+  function xPos(v) { return padL + (v - dom.lo) / dom.span * plotW; }
+  const ax = axisFor(spec);
+  const yPos = v => padT + plotH - (v - ax.min) / ax.range * plotH;
+
+  ctx.strokeStyle = '#202630';
+  ctx.lineWidth = 1;
+  ctx.font = '10px SF Mono, monospace';
+
+  // gridlines + value labels
+  ctx.fillStyle = '#9ba3af';
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let i = 0; i <= 4; i++) {
+    const v = ax.min + ax.range * i / 4;
+    const y = yPos(v);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke();
+    ctx.fillText(Math.round(v * 10) / 10, padL - 6, y);
+  }
+  // the axis ticks, and the axis unit under the value labels
+  const dist = view.axis === 'dist';
+  const secs = inSeconds(dom);
+  const places = dist ? (dom.span < 0.5 ? 3 : dom.span < 5 ? 2 : 1) : 1;
+  ctx.textBaseline = 'top';
+  for (let i = 0; i <= 6; i++) {
+    const tv = dom.lo + dom.span * i / 6;
+    const tick = dom.span < 0.5 ? clockText(Math.abs(tv)) : hms(Math.abs(tv) * 60);
+    // the end labels sit inside the plot: centred, the first ran into the
+    // unit and the last past the canvas edge
+    ctx.textAlign = i === 0 ? 'left' : i === 6 ? 'right' : 'center';
+    ctx.fillText(secs ? (tv < 0 ? '−' : '') + tick : tv.toFixed(places), xPos(tv), h - padB + 4);
+  }
+  ctx.textAlign = 'right';
+  ctx.fillText(dist ? 'km' : secs ? 'm:s' : 'min', padL - 6, h - padB + 4);
+
+  const floor = padT + plotH;
+  // a zoomed window: what lies beyond its ends is cut at the plot's edges
+  ctx.save();
+  ctx.beginPath(); ctx.rect(padL, 0, plotW, h); ctx.clip();
+  series.forEach(s => {
+    const ride = rides[s.k];
+    if (!ride.has[spec.key]) return;
+    const segs = envelope(xArr(ride), offsetOf(s.k), ride.t, ride[spec.field], xPos);
+
+    if (spec.fill && s.style === 'own') {
+      ctx.fillStyle = spec.fill;
+      segs.forEach(seg => {
+        if (seg.length < 2) return;
+        ctx.beginPath();
+        ctx.moveTo(seg[0][0], floor);
+        for (const [x, v] of seg) ctx.lineTo(x, yPos(v));
+        ctx.lineTo(seg[seg.length - 1][0], floor);
+        ctx.closePath();
+        ctx.fill();
+      });
+    }
+
+    ctx.strokeStyle = ctx.fillStyle = strokeOf(spec, s.style);
+    ctx.lineWidth = s.style === 'b' ? 1.2 : 1.4; ctx.lineJoin = 'round';
+    segs.forEach(seg => {
+      if (seg.length === 1) {
+        // a lone reading between two gaps still shows
+        ctx.beginPath(); ctx.arc(seg[0][0], yPos(seg[0][1]), 1.4, 0, Math.PI * 2); ctx.fill();
+        return;
+      }
+      ctx.beginPath();
+      seg.forEach(([x, v], i) => { if (i) ctx.lineTo(x, yPos(v)); else ctx.moveTo(x, yPos(v)); });
+      ctx.stroke();
+    });
+  });
+  ctx.restore();
+
+  ctx.strokeStyle = '#3c434f';
+  ctx.beginPath(); ctx.moveTo(padL, floor); ctx.lineTo(w - padR, floor); ctx.stroke();
+
+  return { w, h, padL, padR, padT, plotW, plotH, dom, xPos, yPos, series };
+}
+
+// ============================================================
+// Hover crosshair, synced across every chart, at one place on the axis
+// ============================================================
+function drawCrosshairAt(v) {
+  const rows = rides.map((r, k) => r ? nearestRow(r, v - offsetOf(k)) : -1);
+  chartRegistry.forEach(info => {
+    const ctx = info.overlay.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    info.overlay.width = info.w * dpr; info.overlay.height = info.h * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, info.w, info.h);
+
+    const x = info.xPos(v);
+    if (brush) {
+      // the window a drag is picking, on every chart at once
+      const a = info.xPos(brush.from);
+      ctx.fillStyle = 'rgba(78,133,188,0.20)';
+      ctx.fillRect(Math.min(a, x), info.padT, Math.abs(x - a), info.plotH);
+    }
+    ctx.strokeStyle = 'rgba(232,237,244,0.35)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, info.padT);
+    ctx.lineTo(x, info.padT + info.plotH);
+    ctx.stroke();
+
+    info.series.forEach(s => {
+      const i = rows[s.k];
+      if (i < 0) return;
+      const ride = rides[s.k];
+      const val = ride[info.spec.field][i];
+      if (!Number.isFinite(val)) return;
+      ctx.beginPath();
+      ctx.arc(info.xPos(xArr(ride)[i] + offsetOf(s.k)), info.yPos(val), 3.2, 0, Math.PI * 2);
+      ctx.fillStyle = strokeOf(info.spec, s.style);
+      ctx.fill();
+      ctx.strokeStyle = '#0a0d13';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+    });
+  });
+
+  document.getElementById('roTime').textContent = view.axis === 'dist' ? v.toFixed(3) + ' km'
+    : inSeconds(viewDom()) ? clockText(v) : v.toFixed(2) + ' min';
+  const clocks = rides.map((r, k) => {
+    if (!r) return null;
+    const i = rows[k], c = i >= 0 ? new Date(r.iso[i]) : null;
+    const text = c && r.iso[i] && !isNaN(c) ? c.toLocaleTimeString() : '—';
+    return comparing() ? (k ? 'B ' : 'A ') + text : text;
+  }).filter(Boolean);
+  document.getElementById('roClock').textContent = clocks.join('  ');
+  activeSpecs().forEach(spec => {
+    const texts = rides.map((r, k) => {
+      if (!r) return null;
+      const i = rows[k];
+      if (i < 0) return '—';
+      return spec.readout ? spec.readout(r, i) : shown(r[spec.field][i], spec.places, spec.unit);
+    }).filter(t => t !== null);
+    let text = texts.join(' / ');
+    if (!comparing() && (spec.key === 'power' || spec.key === 'current')) {
+      const i = rows[0];
+      if (i >= 0 && rides[0][spec.field][i] < 0) text += ' (regen)';
+    }
+    spec.roValue.textContent = text;
+  });
+}
+
+function clearCrosshair() {
+  chartRegistry.forEach(info => {
+    const ctx = info.overlay.getContext('2d');
+    ctx.clearRect(0, 0, info.overlay.width, info.overlay.height);
+  });
+  // the column keeps its place and its lines: off a chart it reads a dash
+  document.getElementById('roTime').textContent = '—';
+  document.getElementById('roClock').textContent = '';
+  CHART_SPECS.forEach(spec => { if (spec.roValue) spec.roValue.textContent = '—'; });
+}
+
+let brush = null; // a drag in progress: where it started on the axis
+let interactionBound = false;
+function setupInteraction() {
+  if (interactionBound) return;
+  interactionBound = true;
+
+  const container = document.getElementById('charts');
+
+  // the place on the axis under a pointer, clamped to the window, or null
+  // off a chart
+  function pointAt(target, clientX) {
+    const stack = target.closest && target.closest('.chart-stack');
+    const info = chartRegistry.find(i => i.stack === stack);
+    if (!info) return null;
+    const x = clientX - stack.getBoundingClientRect().left;
+    const v = info.dom.lo + (x - info.padL) / info.plotW * info.dom.span;
+    return { info, x, v: Math.max(info.dom.lo, Math.min(info.dom.hi, v)) };
+  }
+  function handleMove(target, clientX) {
+    const p = pointAt(target, clientX);
+    if (p) drawCrosshairAt(p.v);
+  }
+
+  container.addEventListener('mousemove', (e) => handleMove(e.target, e.clientX));
+  container.addEventListener('mouseleave', () => { if (!brush) clearCrosshair(); });
+
+  // a drag across a chart picks a window and zooms to it; a click stays a click
+  container.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    const p = pointAt(e.target, e.clientX);
+    if (!p) return;
+    e.preventDefault();
+    brush = { from: p.v, x: e.clientX, target: e.target };
+  });
+  window.addEventListener('mouseup', (e) => {
+    if (!brush) return;
+    const b = brush;
+    brush = null;
+    const p = pointAt(b.target, e.clientX);
+    if (p && Math.abs(e.clientX - b.x) > 6) setZoom(Math.min(b.from, p.v), Math.max(b.from, p.v));
+    else clearCrosshair();
+  });
+  container.addEventListener('dblclick', (e) => {
+    if (pointAt(e.target, e.clientX) && zoom) setZoom(-Infinity, Infinity);
+  });
+
+  // Ctrl or ⌘ with the wheel, or a trackpad pinch, zooms about the pointer;
+  // Shift with the wheel, or a sideways swipe, pans; the plain wheel still
+  // scrolls the page
+  container.addEventListener('wheel', (e) => {
+    const p = pointAt(e.target, e.clientX);
+    if (!p) return;
+    const d = p.info.dom;
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const f = Math.exp(Math.max(-1, Math.min(1, e.deltaY * 0.004)));
+      setZoom(p.v - (p.v - d.lo) * f, p.v + (d.hi - p.v) * f);
+    } else if (zoom && (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY))) {
+      e.preventDefault();
+      const px = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      const shift = px / p.info.plotW * d.span;
+      setZoom(d.lo + shift, d.hi + shift);
+    }
+  }, { passive: false });
+  container.addEventListener('touchstart', (e) => {
+    if (e.touches[0]) handleMove(e.target, e.touches[0].clientX);
+  }, { passive: true });
+  container.addEventListener('touchmove', (e) => {
+    if (!e.target.closest('.chart-stack')) return;
+    if (e.touches[0]) handleMove(e.target, e.touches[0].clientX);
+    e.preventDefault();
+  }, { passive: false });
+  container.addEventListener('touchend', clearCrosshair);
+}
+
+window.addEventListener('resize', () => {
+  clearTimeout(window.__rt);
+  window.__rt = setTimeout(() => { if (rides[0]) renderAll(); }, 120);
+});
+
+// ============================================================
+// Drag & drop / file input wiring
+// ============================================================
+const dzError = document.getElementById('dzError');
+const inputs = [document.getElementById('fileA'), document.getElementById('fileB')];
+
+function showError(msg) {
+  dzError.textContent = msg;
+  dzError.style.display = 'block';
+}
+function clearError() {
+  dzError.style.display = 'none';
+}
+
+// a file read and parsed, or null after its error is shown
+function readRide(file) {
+  return new Promise(resolve => {
+    if (!/\.csv$/i.test(file.name)) {
+      showError('Please drop a .csv ride file.');
+      resolve(null);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        resolve({ data: parseRideCSV(reader.result), name: file.name });
+      } catch (err) {
+        showError('Could not read ' + file.name + ': ' + err.message);
+        resolve(null);
+      }
+    };
+    reader.onerror = () => { showError('Could not read ' + file.name + '.'); resolve(null); };
+    reader.readAsText(file);
+  });
+}
+
+// a drop with two files fills A and B at once, in that order; a ride meant
+// for B while there is no A becomes A, since B is drawn against A
+async function handleFiles(files, slot) {
+  clearError();
+  const two = files.length >= 2 && slot === 0;
+  const read = await Promise.all([...files].slice(0, two ? 2 : 1).map(readRide));
+  read.forEach((r, i) => {
+    if (!r) return;
+    const target = two ? i : (slot === 1 && !rides[0] ? 0 : slot);
+    loadRide(r.data, r.name, target);
+  });
+}
+
+function wireTarget(el, slot) {
+  el.addEventListener('click', e => { if (!e.target.closest('.remove')) inputs[slot].click(); });
+  el.addEventListener('keydown', e => {
+    if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('.remove')) { e.preventDefault(); inputs[slot].click(); }
+  });
+  ['dragenter', 'dragover'].forEach(evt => el.addEventListener(evt, e => {
+    e.preventDefault(); e.stopPropagation(); el.classList.add('dragover');
+  }));
+  ['dragleave', 'drop'].forEach(evt => el.addEventListener(evt, e => {
+    e.preventDefault(); e.stopPropagation(); el.classList.remove('dragover');
+  }));
+  el.addEventListener('drop', e => {
+    const dt = e.dataTransfer;
+    if (dt && dt.files && dt.files.length) handleFiles(dt.files, slot);
+  });
+}
+
+document.querySelectorAll('.slot').forEach(slot => wireTarget(slot, +slot.dataset.slot));
+document.querySelector('.slot[data-slot="1"] .remove').addEventListener('click', e => { e.stopPropagation(); removeB(); });
+inputs.forEach((input, slot) => input.addEventListener('change', e => {
+  if (e.target.files && e.target.files.length) handleFiles(e.target.files, slot);
+  e.target.value = '';
+}));
+// a drop anywhere else on the page: the first ride, or once one is in, the second
+window.addEventListener('dragover', (e) => e.preventDefault());
+window.addEventListener('drop', (e) => {
+  e.preventDefault();
+  const dt = e.dataTransfer;
+  if (dt && dt.files && dt.files.length) handleFiles(dt.files, rides[0] ? 1 : 0);
+});
+
+// ============================================================
+// Boot empty — the slots wait for a ride, the axis works already
+// ============================================================
+syncControls();
+syncZoom();
+</script>
+</body>
+</html>
