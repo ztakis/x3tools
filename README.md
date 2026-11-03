@@ -4,7 +4,7 @@ Downloads for tools made for 3rd-generation scooters.
 
 ## x3dash
 
-A ride dashboard over Bluetooth.
+A dashboard app over BLE for x3 scooter geeks.
 
 <table><tr>
 
