@@ -13,7 +13,7 @@ A dashboard app over BLE for x3 scooter geeks.
 
 </tr></table>
 
-- **[v1.2.4 BETA](https://github.com/ztakis/x3tools/releases/tag/x3dash_v1.2.4-BETA)** — Android APK, plus an unsigned iPhone IPA for sideloading.
+- **[v1.2.6 BETA](https://github.com/ztakis/x3tools/releases/tag/x3dash_v1.2.6-BETA)** — Android APK, plus an unsigned iPhone IPA for sideloading.
 
 ## x3utils
 
