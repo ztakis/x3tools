@@ -2,15 +2,6 @@
 
 Downloads for tools made for 3rd-generation scooters.
 
-## x3utils
-
-Back up and flash the scooter controller over ST-LINK.
-
-- **[CLI v1.8.3](https://github.com/ztakis/x3tools/releases/tag/x3utils-cli-v1.8.3)** — terminal scripts for Windows, Linux and macOS.
-- **[GUI v2.1.10-BETA](https://github.com/ztakis/x3tools/releases/tag/x3utils-gui-v2.1.10-beta)** — desktop app for Windows, Linux and macOS, plus an Android APK.
-
-Guides and source: [x3utils](https://github.com/ztakis/x3utils)
-
 ## x3dash
 
 A ride dashboard over Bluetooth.
@@ -23,6 +14,15 @@ A ride dashboard over Bluetooth.
 </tr></table>
 
 - **[v1.2.4 BETA](https://github.com/ztakis/x3tools/releases/tag/x3dash_v1.2.4-BETA)** — Android APK, plus an unsigned iPhone IPA for sideloading.
+
+## x3utils
+
+Back up and flash the scooter controller over ST-LINK.
+
+- **[CLI v1.8.3](https://github.com/ztakis/x3tools/releases/tag/x3utils-cli-v1.8.3)** — terminal scripts for Windows, Linux and macOS.
+- **[GUI v2.1.10-BETA](https://github.com/ztakis/x3tools/releases/tag/x3utils-gui-v2.1.10-beta)** — desktop app for Windows, Linux and macOS, plus an Android APK.
+
+Guides and source: [x3utils](https://github.com/ztakis/x3utils)
 
 ## Licenses
 
