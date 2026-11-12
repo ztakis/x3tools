@@ -174,9 +174,26 @@
     background:var(--panel); border:1px solid var(--panel-border); border-radius:6px;
     padding:16px 14px 10px; margin-bottom:16px;
   }
+  .panel-head{display:flex; align-items:baseline; gap:6px; margin-bottom:2px;}
+  .panel.collapsed .panel-head{margin-bottom:0;}
+  /* the grip: six dots that pick a chart up and move it; a drag on the chart
+     itself stays a zoom */
+  .grip{
+    flex:none; align-self:center; width:10px; height:15px; margin-left:-4px;
+    cursor:grab; touch-action:none; opacity:.45;
+    background-image:radial-gradient(circle, var(--text-dim) 1.2px, transparent 1.6px);
+    background-size:5px 5px;
+  }
+  .grip:hover, .panel.lifting .grip{opacity:1; background-image:radial-gradient(circle, var(--accent) 1.2px, transparent 1.6px);}
+  .panel.lifting{border-color:var(--accent-dim); box-shadow:0 8px 24px rgba(0,0,0,.5);}
+  body.reordering, body.reordering *{cursor:grabbing !important; user-select:none;}
+  .order-reset{
+    margin-left:10px; padding:0; border:0; background:none; font:inherit; color:var(--accent);
+    cursor:pointer; text-decoration:underline; text-underline-offset:2px;
+  }
   .panel-title{
-    display:flex; justify-content:space-between; align-items:baseline; margin-bottom:2px;
-    width:100%; padding:0; border:0; background:none; color:inherit; font:inherit;
+    display:flex; justify-content:space-between; align-items:baseline;
+    flex:1 1 auto; min-width:0; padding:0; border:0; background:none; color:inherit; font:inherit;
     text-align:left; cursor:pointer; user-select:none; gap:10px; flex-wrap:wrap;
   }
   .panel-title .name{color:var(--text); font-weight:600; font-family:var(--sans); font-size:13px;}
@@ -190,7 +207,6 @@
   .panel-title .peak{font-family:var(--mono); font-size:11px; color:var(--text-dim); font-variant-numeric:tabular-nums;}
   .panel-title .peak b{color:var(--text); font-weight:600;}
   .panel.collapsed{padding:12px 14px;}
-  .panel.collapsed .panel-title{margin-bottom:0;}
   .panel.collapsed .panel-title .name::before{transform:rotate(-90deg);}
   .panel.collapsed .panel-note,
   .panel.collapsed .chart-row{display:none;}
@@ -280,7 +296,7 @@
     </div>
 
     <div id="charts">
-      <div class="foot" id="footNote"></div>
+      <div class="foot" id="foot"><span id="footNote"></span><button type="button" class="order-reset" id="orderReset" hidden>Reset chart order</button></div>
     </div>
   </div>
 
@@ -631,9 +647,137 @@ function applyCollapsed(spec) {
   spec.panel.querySelector('.panel-title').setAttribute('aria-expanded', String(!shut));
 }
 
-function buildPanels() {
+// ============================================================
+// Chart order: a drag on a panel's grip, or Alt+↑/↓ on its title, moves it;
+// the order is remembered in this browser, and the readout column follows it
+// ============================================================
+const ORDER_KEY = 'shfwViewer.order';
+const DEFAULT_ORDER = CHART_SPECS.map(spec => spec.key);
+
+function savedOrder() {
+  try {
+    const o = JSON.parse(localStorage.getItem(ORDER_KEY));
+    return Array.isArray(o) ? o : null;
+  } catch (e) { return null; }
+}
+
+// CHART_SPECS itself is put in order, so everything that walks it follows;
+// a chart the saved order doesn't know yet lands after the ones it does
+function sortSpecs(order) {
+  const rank = key => {
+    const i = order ? order.indexOf(key) : -1;
+    return i >= 0 ? i : 1000 + DEFAULT_ORDER.indexOf(key);
+  };
+  CHART_SPECS.sort((a, b) => rank(a.key) - rank(b.key));
+}
+
+function chartKeys() { return CHART_SPECS.filter(spec => spec.chart !== false).map(spec => spec.key); }
+function isDefaultOrder() {
+  const def = DEFAULT_ORDER.filter(k => chartKeys().includes(k));
+  return chartKeys().every((k, i) => k === def[i]);
+}
+
+// the page follows CHART_SPECS: the panels, the readout lines, the reset link
+function placeAll() {
   const charts = document.getElementById('charts');
-  const foot = document.getElementById('footNote');
+  const foot = document.getElementById('foot');
+  const readout = document.getElementById('readout');
+  CHART_SPECS.forEach(spec => {
+    readout.append(spec.roItem);
+    if (spec.panel) charts.insertBefore(spec.panel, foot);
+  });
+  document.getElementById('orderReset').hidden = isDefaultOrder();
+}
+
+// take the order the panels now stand in, keep it and lay the page out by it
+function commitOrder() {
+  const keys = [...document.querySelectorAll('#charts .panel')].map(p => p.dataset.chart);
+  sortSpecs(keys);
+  try {
+    if (isDefaultOrder()) localStorage.removeItem(ORDER_KEY);
+    else localStorage.setItem(ORDER_KEY, JSON.stringify(chartKeys()));
+  } catch (e) {}
+  placeAll();
+}
+
+function shownPanels() { return [...document.querySelectorAll('#charts .panel')].filter(p => !p.hidden); }
+
+function wireReorder(spec) {
+  const panel = spec.panel;
+  const grip = panel.querySelector('.grip');
+  const charts = document.getElementById('charts');
+  const foot = document.getElementById('foot');
+  let drag = null;
+
+  // near the top or bottom of the window the page scrolls under the drag
+  function edgeScroll() {
+    if (!drag) return;
+    const edge = 48, y = drag.y;
+    const step = y < edge ? -(edge - y) / 3 : y > innerHeight - edge ? (y - innerHeight + edge) / 3 : 0;
+    if (step) { window.scrollBy(0, step); moveTo(y); }
+    drag.raf = requestAnimationFrame(edgeScroll);
+  }
+  // before the first other panel whose middle is below the pointer
+  function moveTo(y) {
+    const next = shownPanels().filter(p => p !== panel).find(p => {
+      const r = p.getBoundingClientRect();
+      return y < r.top + r.height / 2;
+    });
+    const target = next || foot;
+    if (panel.nextElementSibling !== target) charts.insertBefore(panel, target);
+  }
+  // the drag is followed on the window, not by pointer capture: moving the
+  // panel takes the grip out of the page for a moment, and that would end a
+  // capture after the first step
+  function move(e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    drag.y = e.clientY;
+    moveTo(e.clientY);
+  }
+  function end(e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    cancelAnimationFrame(drag.raf);
+    drag = null;
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', end);
+    window.removeEventListener('pointercancel', end);
+    panel.classList.remove('lifting');
+    document.body.classList.remove('reordering');
+    commitOrder();
+  }
+
+  grip.addEventListener('pointerdown', e => {
+    if (drag || e.button !== 0) return;
+    e.preventDefault();
+    clearCrosshair();
+    drag = { id: e.pointerId, y: e.clientY };
+    panel.classList.add('lifting');
+    document.body.classList.add('reordering');
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+    drag.raf = requestAnimationFrame(edgeScroll);
+  });
+
+  const title = panel.querySelector('.panel-title');
+  title.addEventListener('keydown', e => {
+    if (!e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+    e.preventDefault();
+    const shown = shownPanels();
+    const i = shown.indexOf(panel);
+    if (e.key === 'ArrowUp' && i > 0) charts.insertBefore(panel, shown[i - 1]);
+    else if (e.key === 'ArrowDown' && i < shown.length - 1) charts.insertBefore(panel, shown[i + 1].nextElementSibling);
+    else return;
+    commitOrder();
+    title.focus();
+    panel.scrollIntoView({ block: 'nearest' });
+  });
+}
+
+function buildPanels() {
+  sortSpecs(savedOrder());
+  const charts = document.getElementById('charts');
+  const foot = document.getElementById('foot');
   const readout = document.getElementById('readout');
   CHART_SPECS.forEach(spec => {
     addReadoutItem(readout, spec);
@@ -643,8 +787,9 @@ function buildPanels() {
     panel.dataset.chart = spec.key;
     panel.hidden = true;
     panel.innerHTML =
-      '<button type="button" class="panel-title" aria-expanded="true">' +
-        '<span class="name"><span class="swatch"></span></span><span class="peak"></span></button>' +
+      '<div class="panel-head"><span class="grip" title="Drag to move this chart · Alt+↑/↓ on its title"></span>' +
+      '<button type="button" class="panel-title" aria-expanded="true" aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown">' +
+        '<span class="name"><span class="swatch"></span></span><span class="peak"></span></button></div>' +
       (spec.note ? '<div class="panel-note"></div>' : '') +
       '<div class="chart-row"></div>';
     panel.querySelector('.swatch').style.background = spec.color;
@@ -660,6 +805,13 @@ function buildPanels() {
       clearCrosshair();
       if (rides[0]) renderAll();
     });
+    wireReorder(spec);
+  });
+  document.getElementById('orderReset').hidden = isDefaultOrder();
+  document.getElementById('orderReset').addEventListener('click', () => {
+    sortSpecs(null);
+    try { localStorage.removeItem(ORDER_KEY); } catch (e) {}
+    placeAll();
   });
 }
 
