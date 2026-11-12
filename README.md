@@ -21,14 +21,14 @@ Charts for a ride recorded with x3dash REC or SHU: speed, power, temperatures an
 
 - **[Open the viewer](https://ztakis.github.io/x3tools/ride-viewer/)**
 
-## x3utils
+<!-- ## x3utils
 
 Back up and flash the scooter controller over ST-LINK.
 
 - **[CLI v1.8.3](https://github.com/ztakis/x3tools/releases/tag/x3utils-cli-v1.8.3)** — terminal scripts for Windows, Linux and macOS.
 - **[GUI v2.1.10-BETA](https://github.com/ztakis/x3tools/releases/tag/x3utils-gui-v2.1.10-beta)** — desktop app for Windows, Linux and macOS, plus an Android APK.
 
-Guides and source: [x3utils](https://github.com/ztakis/x3utils)
+Guides and source: [x3utils](https://github.com/ztakis/x3utils) -->
 
 ## Licenses
 
