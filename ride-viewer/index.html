@@ -102,14 +102,14 @@
   .nudge input[type=range]{width:260px; accent-color:var(--accent);}
   .nudge .nval{min-width:78px; text-align:right; color:var(--text); font-variant-numeric:tabular-nums;}
   .nudge .reset{border:1px solid var(--panel-border); border-radius:4px; padding:4px 9px;}
-  .zoom{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+  .zoom, .order{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
   .zoom .zval{color:var(--text); font-variant-numeric:tabular-nums;}
-  .zoom .reset{
+  .zoom .reset, .order .reset{
     font:inherit; color:var(--text-dim); background:none; cursor:pointer;
     border:1px solid var(--panel-border); border-radius:4px; padding:4px 9px;
   }
-  .zoom .reset:hover{color:var(--text);}
-  .zoom .reset:focus-visible{outline:1px solid var(--accent); outline-offset:-1px;}
+  .zoom .reset:hover, .order .reset:hover{color:var(--text);}
+  .zoom .reset:focus-visible, .order .reset:focus-visible{outline:1px solid var(--accent); outline-offset:-1px;}
   .zoom .zhint{font-size:10.5px;}
   /* the hint stays readable while there is nothing to reset */
   .controls .zoom.off{opacity:1;}
@@ -187,10 +187,6 @@
   .grip:hover, .panel.lifting .grip{opacity:1; background-image:radial-gradient(circle, var(--accent) 1.2px, transparent 1.6px);}
   .panel.lifting{border-color:var(--accent-dim); box-shadow:0 8px 24px rgba(0,0,0,.5);}
   body.reordering, body.reordering *{cursor:grabbing !important; user-select:none;}
-  .order-reset{
-    margin-left:10px; padding:0; border:0; background:none; font:inherit; color:var(--accent);
-    cursor:pointer; text-decoration:underline; text-underline-offset:2px;
-  }
   .panel-title{
     display:flex; justify-content:space-between; align-items:baseline;
     flex:1 1 auto; min-width:0; padding:0; border:0; background:none; color:inherit; font:inherit;
@@ -272,6 +268,13 @@
         <button type="button" data-mode="side" aria-pressed="false">Side by side</button>
       </div>
     </div>
+    <div class="seg off" id="dirSeg" title="Backwards reads B from its end to its start, to lay a return trip over the way out">
+      <span class="seg-label">Read B</span>
+      <div class="opts" id="dirOpts">
+        <button type="button" data-dir="fwd" aria-pressed="true">Forwards</button>
+        <button type="button" data-dir="back" aria-pressed="false">Backwards</button>
+      </div>
+    </div>
     <div class="nudge off" id="nudge">
       <span class="seg-label">Nudge B</span>
       <button type="button" class="step" id="nudgeMinus" title="Shift-click for ten steps">−</button>
@@ -279,6 +282,11 @@
       <button type="button" class="step" id="nudgePlus" title="Shift-click for ten steps">+</button>
       <span class="nval" id="nudgeVal">0 s</span>
       <button type="button" class="reset" id="nudgeReset">Reset</button>
+    </div>
+    <!-- greyed while the charts stand in their default order -->
+    <div class="order off" id="orderSeg">
+      <span class="seg-label">Charts</span>
+      <button type="button" class="reset" id="orderReset" title="Put the charts back in their default order">Reset order</button>
     </div>
     <div class="zoom off" id="zoomSeg">
       <span class="seg-label">Zoom</span>
@@ -296,7 +304,7 @@
     </div>
 
     <div id="charts">
-      <div class="foot" id="foot"><span id="footNote"></span><button type="button" class="order-reset" id="orderReset" hidden>Reset chart order</button></div>
+      <div class="foot" id="foot"><span id="footNote"></span></div>
     </div>
   </div>
 
@@ -686,7 +694,7 @@ function placeAll() {
     readout.append(spec.roItem);
     if (spec.panel) charts.insertBefore(spec.panel, foot);
   });
-  document.getElementById('orderReset').hidden = isDefaultOrder();
+  document.getElementById('orderSeg').classList.toggle('off', isDefaultOrder());
 }
 
 // take the order the panels now stand in, keep it and lay the page out by it
@@ -807,7 +815,7 @@ function buildPanels() {
     });
     wireReorder(spec);
   });
-  document.getElementById('orderReset').hidden = isDefaultOrder();
+  document.getElementById('orderSeg').classList.toggle('off', isDefaultOrder());
   document.getElementById('orderReset').addEventListener('click', () => {
     sortSpecs(null);
     try { localStorage.removeItem(ORDER_KEY); } catch (e) {}
@@ -923,7 +931,7 @@ function refresh() {
 
   const start = startLabel(A.iso[0]);
   document.getElementById('dateLabel').textContent =
-    A.name + (start ? ' · ' + start : '') + (B ? '   vs   ' + B.name : '');
+    A.name + (start ? ' · ' + start : '') + (B ? '   vs   ' + bName() : '');
   const badge = document.getElementById('durBadge');
   badge.hidden = false;
   badge.textContent = A.stats.durMin.toFixed(1) + (B ? ' / ' + B.stats.durMin.toFixed(1) : '') + ' min ride';
@@ -931,7 +939,7 @@ function refresh() {
   document.querySelectorAll('.slot').forEach(slot => {
     const r = rides[+slot.dataset.slot];
     slot.classList.toggle('filled', !!r);
-    slot.querySelector('.fname').textContent = r ? r.name : '';
+    slot.querySelector('.fname').textContent = !r ? '' : slot.dataset.slot === '1' ? bName() : r.name;
     slot.querySelector('.hint').textContent = r ? 'drop or click to replace'
       : 'drop or click a second ride to compare';
   });
@@ -949,7 +957,8 @@ function refresh() {
     peak.replaceChildren();
     if (!anyHas(spec.key)) return;
     if (!B) { peak.textContent = spec.peak(A); return; }
-    rides.forEach((r, k) => {
+    // B's peaks as ridden, so a start → end reading never turns round
+    [A, bForward].forEach((r, k) => {
       const key = document.createElement('b');
       key.textContent = (k ? '   B ' : 'A ');
       peak.append(key, r.has[spec.key] ? spec.peak(r) : 'no readings');
@@ -966,8 +975,28 @@ function refresh() {
   renderAll();
 }
 
+// B read backwards: a return trip laid over the way out. B is kept as ridden,
+// and the copy on show runs from its end to its start, on either axis, so
+// the axis still climbs and the drawing, the gaps and the hover need nothing
+// of their own. It belongs to the B file, as the nudge does.
+let bForward = null;
+let bBackward = false;
+
+function backwardsRide(r) {
+  const n = r.t.length, out = {};
+  for (const k in r) out[k] = Array.isArray(r[k]) && r[k].length === n ? r[k].slice().reverse() : r[k];
+  const T = r.t[n - 1], D = r.d[n - 1];
+  out.t = out.t.map(v => T - v);
+  out.d = out.d.map(v => D - v);
+  return out;
+}
+function placeB() { rides[1] = bForward && bBackward ? backwardsRide(bForward) : bForward; }
+function bName() { return bForward.name + (bBackward ? ' (backwards)' : ''); }
+
 function loadRide(data, name, slot) {
-  rides[slot] = prepareRide(data, name);
+  const ride = prepareRide(data, name);
+  if (slot === 1) { bForward = ride; bBackward = false; placeB(); }
+  else rides[0] = ride;
   nudge.time = 0; nudge.dist = 0;
   resetZoom();
   clearCrosshair();
@@ -975,6 +1004,7 @@ function loadRide(data, name, slot) {
 }
 
 function removeB() {
+  bForward = null; bBackward = false;
   rides[1] = null;
   nudge.time = 0; nudge.dist = 0;
   resetZoom();
@@ -997,13 +1027,14 @@ function nudgeLabel() {
 function syncControls() {
   // View and Nudge B stay greyed until there is a B to place
   const two = comparing();
-  ['viewSeg', 'nudge'].forEach(id => {
+  ['viewSeg', 'dirSeg', 'nudge'].forEach(id => {
     const el = document.getElementById(id);
     el.classList.toggle('off', !two);
     el.querySelectorAll('button, input').forEach(c => { c.disabled = !two; });
   });
   document.querySelectorAll('#axisOpts button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.axis === view.axis)));
   document.querySelectorAll('#viewOpts button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === view.mode)));
+  document.querySelectorAll('#dirOpts button').forEach(b => b.setAttribute('aria-pressed', String((b.dataset.dir === 'back') === bBackward)));
   // the slider reaches a whole ride either way
   const spans = loaded().map(r => view.axis === 'dist' ? r.d[r.d.length - 1] * 1000 : r.t[r.t.length - 1] * 60);
   const step = nudgeStep();
@@ -1037,6 +1068,17 @@ document.getElementById('viewOpts').addEventListener('click', e => {
   view.mode = b.dataset.mode;
   saveView();
   clearCrosshair();
+  refresh();
+});
+// a turn of B lines it up anew, so the nudge starts again from zero
+document.getElementById('dirOpts').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b || !bForward || (b.dataset.dir === 'back') === bBackward) return;
+  bBackward = b.dataset.dir === 'back';
+  placeB();
+  nudge.time = 0; nudge.dist = 0;
+  clearCrosshair();
+  syncZoom();
   refresh();
 });
 nudgeRange.addEventListener('input', () => setNudge(+nudgeRange.value));
