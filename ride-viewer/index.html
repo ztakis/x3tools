@@ -452,6 +452,7 @@ function parseRideCSV(text) {
     id: opt("Id (A)"),
     vq: opt("Vq (%)"),
     vd: opt("Vd (%)"),
+    derate: opt("Motor derate (%)"),
   };
   // flip sign: + = drawn, - = regen, for the power and the current alike;
   // SHFW's motor values keep the controller's own sign
@@ -514,6 +515,11 @@ const CHART_SPECS = [
     peak: d => fix(lowest(d.vq), 1) + ' – ' + fix(highest(d.vq), 1) + '%' },
   { key: 'vd', field: 'vd', name: 'Vd', short: 'Vd', color: '#93b07a', places: 1, unit: '%',
     peak: d => fix(lowest(d.vd), 1) + ' – ' + fix(highest(d.vd), 1) + '%' },
+  // SHFW's motor derate, on a fixed 0–100 so two rides read alike
+  { key: 'derate', field: 'derate', name: 'Motor derate', short: 'Derate', color: '#e05c5c',
+    fill: 'rgba(224,92,92,0.12)', min: 0, max: 100, places: 0, unit: '%',
+    note: 'how far the controller cuts the motor back · 0 = no derate',
+    peak: d => 'peak ' + fix(highest(d.derate), 0) + '%' },
   { key: 'motor', field: 'motor', name: 'Motor temperature', short: 'Motor', color: '#c08be0', places: 0, unit: ' °C',
     note: 'a patched VCU · a gap is a row with no reading',
     peak: d => 'peak ' + fix(highest(d.motor), 0) + ' °C' },
@@ -547,6 +553,7 @@ const CHIPS = [
   { label: 'Max vehicle temp', get: s => s.maxTemp, places: 0, unit: '°C', needs: 'temp' },
   { label: 'Max controller temp', get: s => s.maxCtrl, places: 1, unit: '°C', needs: 'ctrl' },
   { label: 'Max motor temp', get: s => s.maxMotor, places: 0, unit: '°C', needs: 'motor' },
+  { label: 'Max derate', cls: 'warn', get: s => s.maxDerate, places: 0, unit: '%', needs: 'derate' },
 ];
 
 function loaded() { return rides.filter(Boolean); }
@@ -852,9 +859,10 @@ function computeStats(data) {
   const maxMotor = highest(data.motor);
   const maxCtrl = highest(data.ctrl);
   const peakIq = highest(data.iq);
+  const maxDerate = highest(data.derate);
   const durMin = data.t[data.t.length - 1];
   return { dist, tripSec, topSpeed, fwId, peakDraw, peakAmps, peakIq, battStart, battEnd, maxTemp,
-           maxCtrl, maxMotor, durMin };
+           maxCtrl, maxMotor, maxDerate, durMin };
 }
 
 function startLabel(iso) {
