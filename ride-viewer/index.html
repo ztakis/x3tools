@@ -439,7 +439,7 @@ function parseRideCSV(text) {
     power: opt("Power (W)"),
     voltage: opt("Voltage (V)"),
     range: opt("Remaining mileage (km)"),
-    temp: opt("Temperature (°C)"),                         // SHU v4's vehicle temperature
+    temp: opt("Battery temp (°C)", "Temperature (°C)"),    // one value under every name: the BMS's
     motor: opt("Motor temp (°C)", "Motor temperature (°C)"), // REC's twelfth column
     mileage: opt("Trip mileage (km)"),
     tripSec: opt("Trip time"),
@@ -531,7 +531,8 @@ const CHART_SPECS = [
     peak: d => fix(lowest(d.voltage), 2) + ' – ' + fix(highest(d.voltage), 2) + ' V' },
   { key: 'range', field: 'range', name: 'Remaining mileage', short: 'Range', color: '#5cc3cc', places: 1, unit: ' km',
     peak: d => fix(firstFinite(d.range), 1) + ' → ' + fix(lastFinite(d.range), 1) + ' km' },
-  { key: 'temp', field: 'temp', name: 'Vehicle temperature', short: 'Vehicle', color: '#d9705e',
+  { key: 'temp', field: 'temp', name: 'Battery temperature', short: 'Batt temp', color: '#d9705e',
+    note: 'what the BMS reports · usually the highest of its six sensors',
     fill: 'rgba(217,112,94,0.12)', places: 0, unit: ' °C',
     peak: d => 'peak ' + fix(highest(d.temp), 0) + ' °C' },
   // the trip counters only climb, so they show in the readout and draw no chart
@@ -550,7 +551,7 @@ const CHIPS = [
   { label: 'Peak current', cls: 'warn', get: s => s.peakAmps, places: 1, unit: 'A' },
   { label: 'Peak Iq', cls: 'warn', get: s => s.peakIq, places: 1, unit: 'A', needs: 'iq' },
   { label: 'Battery used', get: s => s.battStart - s.battEnd, places: 0, unit: '%' },
-  { label: 'Max vehicle temp', get: s => s.maxTemp, places: 0, unit: '°C', needs: 'temp' },
+  { label: 'Max battery temp', get: s => s.maxTemp, places: 0, unit: '°C', needs: 'temp' },
   { label: 'Max controller temp', get: s => s.maxCtrl, places: 1, unit: '°C', needs: 'ctrl' },
   { label: 'Max motor temp', get: s => s.maxMotor, places: 0, unit: '°C', needs: 'motor' },
   { label: 'Max derate', cls: 'warn', get: s => s.maxDerate, places: 0, unit: '%', needs: 'derate' },
